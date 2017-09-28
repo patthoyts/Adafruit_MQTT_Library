@@ -95,7 +95,9 @@
 // Largest full packet we're able to send.
 // Need to be able to store at least ~90 chars for a connect packet with full
 // 23 char client ID.
-#define MAXBUFFERSIZE (150)
+#ifndef MQTT_MAXBUFFERSIZE
+#define MQTT_MAXBUFFERSIZE (150)
+#endif // MQTT_MAXBUFFERSIZE
 
 #define MQTT_CONN_USERNAMEFLAG    0x80
 #define MQTT_CONN_PASSWORDFLAG    0x40
@@ -110,10 +112,12 @@
 
 // how much data we save in a subscription object
 // eg max-subscription-payload-size
-#if defined  (__AVR_ATmega32U4__) || defined(__AVR_ATmega328P__)
-  #define SUBSCRIPTIONDATALEN 20
-#else
-  #define SUBSCRIPTIONDATALEN 100
+#ifndef SUBSCRIPTIONDATALEN
+  #if defined  (__AVR_ATmega32U4__) || defined(__AVR_ATmega328P__)
+    #define SUBSCRIPTIONDATALEN 20
+  #else
+    #define SUBSCRIPTIONDATALEN 180
+  #endif
 #endif
 
 class AdafruitIO_MQTT;   // forward decl
@@ -233,7 +237,7 @@ class Adafruit_MQTT {
   const char *will_payload;
   uint8_t will_qos;
   uint8_t will_retain;
-  uint8_t buffer[MAXBUFFERSIZE];  // one buffer, used for all incoming/outgoing
+  uint8_t buffer[MQTT_MAXBUFFERSIZE];  // one buffer, used for all incoming/outgoing
   uint16_t packet_id_counter;
 
  private:

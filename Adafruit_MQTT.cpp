@@ -157,7 +157,7 @@ int8_t Adafruit_MQTT::connect() {
     return -1;
 
   // Read connect response packet and verify it
-  len = readFullPacket(buffer, MAXBUFFERSIZE, CONNECT_TIMEOUT_MS);
+  len = readFullPacket(buffer, MQTT_MAXBUFFERSIZE, CONNECT_TIMEOUT_MS);
   if (len != 4)
     return -1;
   if ((buffer[0] != (MQTT_CTRL_CONNECTACK << 4)) || (buffer[1] != 2))
@@ -206,7 +206,7 @@ int8_t Adafruit_MQTT::connect(const char *user, const char *pass)
 
 uint16_t Adafruit_MQTT::processPacketsUntil(uint8_t *buffer, uint8_t waitforpackettype, uint16_t timeout) {
   uint16_t len;
-  while (len = readFullPacket(buffer, MAXBUFFERSIZE, timeout)) {
+  while (len = readFullPacket(buffer, MQTT_MAXBUFFERSIZE, timeout)) {
 
     //DEBUG_PRINT("Packet read size: "); DEBUG_PRINTLN(len);
     // TODO: add subscription reading & call back processing here
@@ -305,7 +305,7 @@ bool Adafruit_MQTT::publish(const char *topic, uint8_t *data, uint16_t bLen, uin
 
   // If QOS level is high enough verify the response packet.
   if (qos > 0) {
-    len = readFullPacket(buffer, MAXBUFFERSIZE, PUBLISH_TIMEOUT_MS);
+    len = readFullPacket(buffer, MQTT_MAXBUFFERSIZE, PUBLISH_TIMEOUT_MS);
     DEBUG_PRINT(F("Publish QOS1+ reply:\t"));
     DEBUG_PRINTBUFFER(buffer, len);
     if (len != 4)
@@ -386,7 +386,7 @@ bool Adafruit_MQTT::unsubscribe(Adafruit_MQTT_Subscribe *sub) {
       if(subscriptions[i]->qos > 0 && MQTT_PROTOCOL_LEVEL > 3) {
 
         // wait for UNSUBACK
-        len = readFullPacket(buffer, MAXBUFFERSIZE, CONNECT_TIMEOUT_MS);
+        len = readFullPacket(buffer, MQTT_MAXBUFFERSIZE, CONNECT_TIMEOUT_MS);
         DEBUG_PRINT(F("UNSUBACK:\t"));
         DEBUG_PRINTBUFFER(buffer, len);
 
@@ -454,14 +454,21 @@ Adafruit_MQTT_Subscribe *Adafruit_MQTT::readSubscription(int16_t timeout) {
   uint16_t i, topiclen, datalen;
 
   // Check if data is available to read.
-  uint16_t len = readFullPacket(buffer, MAXBUFFERSIZE, timeout); // return one full packet
+  uint16_t len = readFullPacket(buffer, MQTT_MAXBUFFERSIZE, timeout); // return one full packet
   if (!len)
     return NULL;  // No data available, just quit.
   DEBUG_PRINT("Packet len: "); DEBUG_PRINTLN(len); 
   DEBUG_PRINTBUFFER(buffer, len);
 
+  uint8_t offset = 0;
+  if (buffer[1] & 0x80)
+  {
+     ++offset;
+    if (buffer[2] & 0x80)
+      ++offset;
+  }
   // Parse out length of packet.
-  topiclen = buffer[3];
+  topiclen = buffer[offset + 3];
   DEBUG_PRINT(F("Looking for subscription len ")); DEBUG_PRINTLN(topiclen);
 
   // Find subscription associated with this packet.
@@ -473,7 +480,7 @@ Adafruit_MQTT_Subscribe *Adafruit_MQTT::readSubscription(int16_t timeout) {
         continue;
       // Stop if the subscription topic matches the received topic. Be careful
       // to make comparison case insensitive.
-      if (strncasecmp((char*)buffer+4, subscriptions[i]->topic, topiclen) == 0) {
+      if (strncasecmp((char*)buffer+offset+4, subscriptions[i]->topic, topiclen) == 0) {
         DEBUG_PRINT(F("Found sub #")); DEBUG_PRINTLN(i);
         break;
       }
@@ -486,9 +493,9 @@ Adafruit_MQTT_Subscribe *Adafruit_MQTT::readSubscription(int16_t timeout) {
   // Check if it is QoS 1, TODO: we dont support QoS 2
   if ((buffer[0] & 0x6) == 0x2) {
     packet_id_len = 2;
-    packetid = buffer[topiclen+4];
+    packetid = buffer[topiclen+offset+4];
     packetid <<= 8;
-    packetid |= buffer[topiclen+5];
+    packetid |= buffer[topiclen+offset+5];
   }
 
   // zero out the old data
@@ -499,7 +506,7 @@ Adafruit_MQTT_Subscribe *Adafruit_MQTT::readSubscription(int16_t timeout) {
     datalen = SUBSCRIPTIONDATALEN-1; // cut it off
   }
   // extract out just the data, into the subscription object itself
-  memmove(subscriptions[i]->lastread, buffer+4+topiclen+packet_id_len, datalen);
+  memmove(subscriptions[i]->lastread, buffer+offset+4+topiclen+packet_id_len, datalen);
   subscriptions[i]->datalen = datalen;
   DEBUG_PRINT(F("Data len: ")); DEBUG_PRINTLN(datalen);
   DEBUG_PRINT(F("Data: ")); DEBUG_PRINTLN((char *)subscriptions[i]->lastread);
@@ -520,7 +527,7 @@ Adafruit_MQTT_Subscribe *Adafruit_MQTT::readSubscription(int16_t timeout) {
 void Adafruit_MQTT::flushIncoming(uint16_t timeout) {
   // flush input!
   DEBUG_PRINTLN(F("Flushing input buffer"));
-  while (readPacket(buffer, MAXBUFFERSIZE, timeout));
+  while (readPacket(buffer, MQTT_MAXBUFFERSIZE, timeout));
 }
 
 bool Adafruit_MQTT::ping(uint8_t num) {
